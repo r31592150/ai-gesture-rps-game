@@ -10,8 +10,8 @@ const g = cv.getContext('2d');
 const vid = document.getElementById('vid');
 
 const PICKS = ['rock', 'paper', 'scissors'];
-const EM = { rock: '✊', paper: '🖐', scissors: '✌️', thumbs_up: '👍' };
-const LB = { rock: '石頭', paper: '布', scissors: '剪刀', thumbs_up: '讚' };
+const EM = { rock: '✊', paper: '🖐', scissors: '✌️', thumbs_up: '👍', thumbs_down: '👎' };
+const LB = { rock: '石頭', paper: '布', scissors: '剪刀', thumbs_up: '讚', thumbs_down: '倒讚' };
 const BEATS = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
 const COLORS = {
     primary: '#00ff88',
@@ -27,7 +27,7 @@ const SKEL = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5
     [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
 
 // --- 遊戲狀態 ---
-let state = 'loading'; // loading, idle, countdown, reveal, win, lose, draw, menu
+let state = 'loading'; // loading, idle, countdown, reveal, win, lose, draw, menu, ended
 let stateStartTime = Date.now();
 let playerGesture = null;
 let cpuGesture = null;
@@ -38,10 +38,10 @@ let gestureBuffer = [];
 let holdStartTime = null;
 let menuHoldStartTime = null;
 let score = { w: 0, l: 0, d: 0 };
-let particles = [];
 
 const BUFFER_SIZE = 10;
-const HOLD_DURATION = 500; // 毫秒
+const HOLD_DURATION = 500; // 一般出拳判定時間
+const MENU_HOLD_DURATION = 2000; // 選單判定時間：2秒
 const COUNTDOWN_SECONDS = 3;
 
 // --- 初始化 MediaPipe ---
@@ -95,10 +95,6 @@ function classifyGesture(l) {
     const extended = tips.map((t, i) => l[t].y < l[pips[i]].y);
     const extendedCount = extended.filter(Boolean).length;
 
-    // 比讚偵測
-    const thumbUp = l[4].y < l[3].y && l[4].y < l[2].y && l[4].y < l[5].y;
-    if (thumbUp && extendedCount === 0) return 'thumbs_up';
-
     if (extendedCount === 0) return 'rock';
     if (extendedCount >= 3) return 'paper';
     if (extended[0] && extended[1] && !extended[2] && !extended[3]) return 'scissors';
@@ -131,6 +127,7 @@ function changeState(newState) {
     if (newState === 'idle') instructionEl.innerText = '請比出 ✊ 石頭、🖐 布 或 ✌️ 剪刀 來開始';
     if (newState === 'countdown') instructionEl.innerText = '保持手勢！倒數中...';
     if (newState === 'reveal') instructionEl.innerText = '揭曉結果！';
+    if (newState === 'ended') instructionEl.innerText = '遊戲已結束，重新整理頁面可再次遊玩';
 }
 
 function drawRoundedRect(x, y, w, h, r) {
@@ -144,7 +141,6 @@ function drawRoundedRect(x, y, w, h, r) {
 }
 
 function getCanvasCoords(p) {
-    // 水平鏡像處理
     return [(1 - p.x) * W, p.y * H];
 }
 
@@ -248,10 +244,16 @@ function update() {
     }
 
     if (state === 'menu') {
-        if (stableGesture === 'thumbs_up') {
+        // 修改：繼續遊玩 (張開手掌/布) 或 結束遊玩 (握拳/石頭)
+        if (stableGesture === 'paper' || stableGesture === 'rock') {
             if (!menuHoldStartTime) menuHoldStartTime = now;
-            if (now - menuHoldStartTime >= HOLD_DURATION) {
-                changeState('idle');
+            if (now - menuHoldStartTime >= MENU_HOLD_DURATION) {
+                if (stableGesture === 'paper') {
+                    changeState('idle');
+                } else {
+                    changeState('ended');
+                }
+                menuHoldStartTime = null;
             }
         } else {
             menuHoldStartTime = null;
@@ -261,10 +263,8 @@ function update() {
 
 // --- 主渲染循環 ---
 function render() {
-    // 1. 清除畫布
     g.clearRect(0, 0, W, H);
 
-    // 2. 繪製視訊背景 (鏡像)
     if (vid.readyState >= 2) {
         g.save();
         g.translate(W, 0);
@@ -273,11 +273,16 @@ function render() {
         g.restore();
     }
 
-    // 3. 根據狀態繪製 UI
     if (state === 'loading') {
         g.fillStyle = 'rgba(0,0,0,0.8)';
         g.fillRect(0, 0, W, H);
         drawText('AI 載入中...', W / 2, H / 2, 30, COLORS.secondary);
+    } else if (state === 'ended') {
+        g.fillStyle = 'rgba(0,0,0,0.9)';
+        g.fillRect(0, 0, W, H);
+        drawText('遊戲結束', W / 2, H / 2 - 40, 48, COLORS.accent);
+        drawText(`最終比數: ${score.w}勝 ${score.l}敗 ${score.d}平`, W / 2, H / 2 + 20, 20);
+        drawText('感謝遊玩！重新整理網頁可再次開始', W / 2, H / 2 + 60, 14, 'rgba(255,255,255,0.5)');
     } else {
         drawSkeleton();
         
@@ -304,15 +309,11 @@ function render() {
         if (state === 'reveal' || ['win', 'lose', 'draw'].includes(state)) {
             g.fillStyle = 'rgba(0,0,0,0.7)';
             g.fillRect(0, 0, W, H);
-            
             const cardW = 180, cardH = 220;
             drawCard(playerGesture, W / 4 - cardW / 2, H / 2 - cardH / 2, cardW, cardH, COLORS.secondary);
-            
             const cpuAlpha = Math.min(1, (Date.now() - stateStartTime) / 800);
             drawCard(cpuGesture, W * 3 / 4 - cardW / 2, H / 2 - cardH / 2, cardW, cardH, COLORS.accent, cpuAlpha);
-            
             drawText('VS', W / 2, H / 2, 40, '#fff');
-            
             if (['win', 'lose', 'draw'].includes(state)) {
                 let msg = state === 'win' ? 'YOU WIN! 🎉' : (state === 'lose' ? 'YOU LOSE 😢' : 'DRAW 🤝');
                 let col = state === 'win' ? COLORS.primary : (state === 'lose' ? COLORS.accent : COLORS.warning);
@@ -323,14 +324,26 @@ function render() {
         if (state === 'menu') {
             g.fillStyle = 'rgba(0,0,0,0.8)';
             g.fillRect(0, 0, W, H);
-            drawText('想再玩一局嗎？', W / 2, H / 2 - 40, 32);
-            drawText('比出 👍 讚 手勢繼續遊戲', W / 2, H / 2 + 20, 18, COLORS.secondary);
+            drawText('遊戲選單', W / 2, H / 2 - 100, 32);
+            
+            // 提示文字
+            drawText('✋ 張開手掌 2 秒：繼續遊玩', W / 2, H / 2 - 30, 18, COLORS.primary);
+            drawText('✊ 握拳 2 秒：結束遊玩', W / 2, H / 2 + 10, 18, COLORS.accent);
             
             if (menuHoldStartTime) {
-                const progress = Math.min(1, (Date.now() - menuHoldStartTime) / HOLD_DURATION);
-                g.fillStyle = COLORS.primary;
-                drawRoundedRect(W / 2 - 100, H / 2 + 60, 200 * progress, 5, 2);
+                const progress = Math.min(1, (Date.now() - menuHoldStartTime) / MENU_HOLD_DURATION);
+                const col = stableGesture === 'paper' ? COLORS.primary : COLORS.accent;
+                const action = stableGesture === 'paper' ? '繼續中...' : '結束中...';
+                
+                g.fillStyle = 'rgba(255,255,255,0.1)';
+                drawRoundedRect(W / 2 - 120, H / 2 + 60, 240, 12, 6);
                 g.fill();
+                
+                g.fillStyle = col;
+                drawRoundedRect(W / 2 - 120, H / 2 + 60, 240 * progress, 12, 6);
+                g.fill();
+                
+                drawText(action, W / 2, H / 2 + 90, 16, col);
             }
         }
     }
