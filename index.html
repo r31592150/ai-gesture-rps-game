@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✊ 終極手勢猜拳 — AI 改良版</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <!-- 使用 CDN 引入必要的庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <video id="vid" playsinline style="display:none;"></video>
+        <div id="canvas-wrapper">
+            <canvas id="c" width="640" height="480"></canvas>
+        </div>
+        <div id="ui-overlay">
+            <div id="header">
+                <h1>AI GESTURE BATTLE</h1>
+                <div id="score-board">
+                    <span class="score-item win">WIN: <span id="win-count">0</span></span>
+                    <span class="score-item lose">LOSE: <span id="lose-count">0</span></span>
+                    <span class="score-item draw">DRAW: <span id="draw-count">0</span></span>
+                </div>
+            </div>
+            <div id="instruction">請允許攝影機存取以開始遊戲</div>
+        </div>
+    </div>
+
+    <!-- MediaPipe 核心庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <!-- 遊戲邏輯 -->
+    <script src="sketch.js"></script>
+</body>
+</html>
